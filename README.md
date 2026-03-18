@@ -7,7 +7,7 @@ A proxy server that exposes Qwen models through an OpenAI-compatible API endpoin
 
 ## Important Notes
 
-To have a better experience for using it as prod you can use cloud flare worker . check the repo https://github.com/aptdnfapt/qwen-worker-proxy
+To have a better experience for using it as prod you can use cloud flare worker . check the repo https://github.com/tritueviet/qwen-worker-proxy
 
 Users might face errors or 504 Gateway Timeout issues when using contexts with 130,000 to 150,000 tokens or more. This appears to be a practical limit for Qwen models. Qwen code itself tends to also break down and get stuck on this limit.
 

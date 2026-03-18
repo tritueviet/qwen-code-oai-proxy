@@ -16,7 +16,7 @@ services:
       - QWEN_CODE_AUTH_USE=${QWEN_CODE_AUTH_USE:-true}
       - API_KEY=${API_KEY:-}
 
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test:
         [

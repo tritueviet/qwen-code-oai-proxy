@@ -12,6 +12,8 @@ const { AccountRefreshScheduler } = require('./utils/accountRefreshScheduler.js'
 const { systemPromptTransformer } = require('./utils/systemPromptTransformer.js');
 const liveLogger = require('./utils/liveLogger.js');
 const fileLogger = require('./utils/fileLogger.js');
+const path = require('path');
+const { promises: fs } = require('fs');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -456,6 +458,16 @@ const { mcpGetHandler, mcpPostHandler } = require('./mcp.js');
 app.get('/mcp', mcpGetHandler);
 app.post('/mcp', mcpPostHandler);
 
+// Status endpoint to check request counts and account status
+app.get('/status', async (req, res) => {
+    const statusResult = await checkRequestCounts();
+    res.json({
+        status: 'ok',
+        info: statusResult
+    });
+});
+
+
 // Health check endpoint
 app.get('/health', async (req, res) => {
   try {
@@ -665,3 +677,74 @@ app.listen(PORT, HOST, async () => {
     console.log(`\x1b[31mScheduler init failed: ${error.message}\x1b[0m`);
   }
 });
+
+async function checkRequestCounts() {
+  const result = {
+    accounts: [],
+    defaultAccount: null,
+    totalAccounts: 0,
+    foundAccounts: [],
+    errors: []
+  };
+
+  try {
+    const authManager = new QwenAuthManager();
+
+    await authManager.loadAllAccounts();
+    const accountIds = authManager.getAccountIds();
+
+    const defaultCredentials = await authManager.loadCredentials();
+
+    if (accountIds.length === 0 && !defaultCredentials) {
+      result.errors.push('No accounts found.');
+      return result;
+    }
+
+    result.totalAccounts = accountIds.length + (defaultCredentials ? 1 : 0);
+
+    let requestCounts = new Map();
+    const requestCountFile = path.join(authManager.qwenDir, 'request_counts.json');
+    try {
+      const data = await fs.readFile(requestCountFile, 'utf8');
+      const counts = JSON.parse(data);
+
+      if (counts.requests) {
+        for (const [accountId, count] of Object.entries(counts.requests)) {
+          requestCounts.set(accountId, count);
+        }
+      }
+    } catch (error) {
+      // File doesn't exist or is invalid, continue with empty counts
+    }
+
+    for (const accountId of accountIds) {
+      const count = requestCounts.get(accountId) || 0;
+      const credentials = authManager.getAccountCredentials(accountId);
+      const isValid = credentials && authManager.isTokenValid(credentials);
+
+      const accountInfo = {
+        accountId,
+        status: isValid ? 'valid' : 'invalid',
+        requestsToday: count,
+        expiry: credentials && credentials.expiry_date ? new Date(credentials.expiry_date).toLocaleString() : null
+      };
+      result.accounts.push(accountInfo);
+      result.foundAccounts.push(accountId);
+    }
+
+    if (defaultCredentials) {
+      const isValid = authManager.isTokenValid(defaultCredentials);
+      const defaultCount = requestCounts.get('default') || 0;
+      result.defaultAccount = {
+        status: isValid ? 'valid' : 'invalid',
+        requestsToday: defaultCount,
+        expiry: defaultCredentials.expiry_date ? new Date(defaultCredentials.expiry_date).toLocaleString() : null
+      };
+      result.foundAccounts.push('default');
+    }
+  } catch (error) {
+    result.errors.push('Failed to check request counts: ' + error.message);
+  }
+
+  return result;
+}
