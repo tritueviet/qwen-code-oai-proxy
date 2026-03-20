@@ -1,5 +1,6 @@
 const { QwenAuthManager } = require('../qwen/auth.js');
 const { DebugLogger } = require('./logger.js');
+const axios = require('axios');
 
 class AccountRefreshScheduler {
   constructor(qwenAPI) {
@@ -14,7 +15,7 @@ class AccountRefreshScheduler {
    */
   async initialize() {
     console.log('\x1b[36m%s\x1b[0m', 'Initializing account refresh scheduler...');
-    
+
     // Start the refresh scheduler
     await this.startScheduler();
   }
@@ -45,7 +46,7 @@ class AccountRefreshScheduler {
   async checkAndRefreshExpiredAccounts() {
     // Check if a refresh process is already running
     if (this.isRefreshing) {
-    //   console.log('\x1b[33m%s\x1b[0m', 'Account refresh is already in progress, skipping this check');
+      //   console.log('\x1b[33m%s\x1b[0m', 'Account refresh is already in progress, skipping this check');
       return;
     }
 
@@ -145,6 +146,7 @@ class AccountRefreshScheduler {
             console.log(`\x1b[32m●\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[32mrefreshed\x1b[0m`);
           } catch (refreshError) {
             console.warn(`\x1b[31m✗\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[31mfailed\x1b[0m: ${refreshError.message.substring(0, 30)}`);
+            await this.sendTelegramAlert(accountId, refreshError.message);
           }
 
         });
@@ -210,11 +212,39 @@ class AccountRefreshScheduler {
         successCount++;
       } catch (refreshError) {
         console.warn(`\x1b[31m✗\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[31mfailed\x1b[0m: ${refreshError.message.substring(0, 30)}`);
+        await this.sendTelegramAlert(accountId, refreshError.message);
         failCount++;
       }
     }
 
     console.log(`\x1b[36m●\x1b[0m Refresh | \x1b[36mforced\x1b[0m | ${successCount} ok, ${failCount} fail`);
+  }
+
+  /**
+   * Send Telegram alert when account token refresh fails
+   */
+  async sendTelegramAlert(accountId, errorMsg) {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    const envName = process.env.ENV || 'Unknown';
+
+    if (!botToken || !chatId) {
+      console.warn(`\x1b[33m~\x1b[0m Telegram alert skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set in .env file`);
+      return;
+    }
+
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const message = `🚨 *Qwen Proxy Alert*\n\n*Server/Env:* \`${envName}\`\n*Account ID:* \`${accountId}\`\n*Error:* \n\`${errorMsg}\`\n*Action:* Token refresh failed!`;
+
+    try {
+      await axios.post(url, {
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      });
+    } catch (e) {
+      console.warn(`\x1b[33m~\x1b[0m Telegram alert failed: ${e.message}`);
+    }
   }
 }
 
