@@ -12,7 +12,7 @@ const QWEN_MULTI_ACCOUNT_PREFIX = 'oauth_creds_';
 const QWEN_MULTI_ACCOUNT_SUFFIX = '.json';
 
 // OAuth Configuration (from qwen-code analysis)
-const QWEN_OAUTH_BASE_URL = 'https://chat.qwen.ai';
+const QWEN_OAUTH_BASE_URL = 'https://chat.qwenlm.ai';
 const QWEN_OAUTH_DEVICE_CODE_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/device/code`;
 const QWEN_OAUTH_TOKEN_ENDPOINT = `${QWEN_OAUTH_BASE_URL}/api/v1/oauth2/token`;
 const QWEN_OAUTH_CLIENT_ID = 'f0304373b74a44d2b584a3fb70ca9e56';
