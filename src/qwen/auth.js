@@ -273,7 +273,6 @@ class QwenAuthManager {
         expiry_date: Date.now() + tokenData.expires_in * 1000,
       }
 
-      await this.saveCredentials(newCredentials);
       console.log('\x1b[32m%s\x1b[0m', 'Qwen access token refreshed successfully');
       return newCredentials;
     } catch (error) {
