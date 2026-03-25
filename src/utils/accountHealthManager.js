@@ -1,6 +1,13 @@
 const path = require('path');
 const { promises: fs } = require('fs');
 
+let telegramNotifier;
+try {
+  telegramNotifier = require('./telegramNotifier.js');
+} catch (e) {
+  telegramNotifier = null;
+}
+
 /**
  * AccountHealthManager - Manages account health with progressive blocking
  * 
@@ -90,17 +97,25 @@ class AccountHealthManager {
     const newStrikes = currentStrikes + 1;
     this.strikes.set(accountId, newStrikes);
     this.lastStrikeTime.set(accountId, Date.now());
-    
+
     const blockTime = this.getBlockTime(newStrikes);
     if (blockTime > 0) {
       const blockUntil = Date.now() + blockTime;
       this.blockedUntil.set(accountId, blockUntil);
       const blockMinutes = Math.round(blockTime / 60000);
       console.log(`\x1b[33mAccount ${accountId} blocked for ${blockMinutes}min (strike #${newStrikes})\x1b[0m`);
+
+      if (telegramNotifier?.notifyAccountBlocked) {
+        telegramNotifier.notifyAccountBlocked(
+          accountId,
+          blockUntil,
+          `Strike #${newStrikes} - blocked for ${blockMinutes} minutes`
+        );
+      }
     } else {
       console.log(`\x1b[33mAccount ${accountId} strike #${newStrikes}\x1b[0m`);
     }
-    
+
     this.save();
     return newStrikes;
   }

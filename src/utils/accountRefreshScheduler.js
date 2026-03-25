@@ -1,6 +1,11 @@
 const { QwenAuthManager } = require('../qwen/auth.js');
 const { DebugLogger } = require('./logger.js');
-const axios = require('axios');
+const {
+  notifyTokenRefreshFailed,
+  notifyAccountBlocked,
+  notifyAllAccountsUnavailable,
+  isTelegramConfigured,
+} = require('./telegramNotifier.js');
 
 class AccountRefreshScheduler {
   constructor(qwenAPI) {
@@ -137,7 +142,6 @@ class AccountRefreshScheduler {
           }
 
           try {
-            // Attempt to refresh the token
             await this.qwenAPI.authManager.performTokenRefresh(
               credentials,
               isDefault ? null : accountId
@@ -145,8 +149,11 @@ class AccountRefreshScheduler {
             this.refreshThresholds.delete(accountId);
             console.log(`\x1b[32m●\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[32mrefreshed\x1b[0m`);
           } catch (refreshError) {
-            console.warn(`\x1b[31m✗\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[31mfailed\x1b[0m: ${refreshError.message.substring(0, 30)}`);
-            await this.sendTelegramAlert(accountId, refreshError.message);
+            const errorMsg = refreshError.message || String(refreshError);
+            console.warn(`\x1b[31m✗\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[31mfailed\x1b[0m: ${errorMsg}`);
+
+            const isBlocked = this.qwenAPI.healthManager?.isBlocked(accountId);
+            await notifyTokenRefreshFailed(accountId, errorMsg, isBlocked);
           }
 
         });
@@ -211,8 +218,11 @@ class AccountRefreshScheduler {
         console.log(`\x1b[32m●\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[32mforced\x1b[0m`);
         successCount++;
       } catch (refreshError) {
-        console.warn(`\x1b[31m✗\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[31mfailed\x1b[0m: ${refreshError.message.substring(0, 30)}`);
-        await this.sendTelegramAlert(accountId, refreshError.message);
+        const errorMsg = refreshError.message || String(refreshError);
+        console.warn(`\x1b[31m✗\x1b[0m Refresh | \x1b[36m${accountId}\x1b[0m | \x1b[31mfailed\x1b[0m: ${errorMsg}`);
+
+        const isBlocked = this.qwenAPI.healthManager?.isBlocked(accountId);
+        await notifyTokenRefreshFailed(accountId, errorMsg, isBlocked);
         failCount++;
       }
     }
@@ -220,32 +230,6 @@ class AccountRefreshScheduler {
     console.log(`\x1b[36m●\x1b[0m Refresh | \x1b[36mforced\x1b[0m | ${successCount} ok, ${failCount} fail`);
   }
 
-  /**
-   * Send Telegram alert when account token refresh fails
-   */
-  async sendTelegramAlert(accountId, errorMsg) {
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
-    const envName = process.env.ENV || 'Unknown';
-
-    if (!botToken || !chatId) {
-      console.warn(`\x1b[33m~\x1b[0m Telegram alert skipped: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set in .env file`);
-      return;
-    }
-
-    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-    const message = `🚨 *Qwen Proxy Alert*\n\n*Server/Env:* \`${envName}\`\n*Account ID:* \`${accountId}\`\n*Error:* \n\`${errorMsg}\`\n*Action:* Token refresh failed!`;
-
-    try {
-      await axios.post(url, {
-        chat_id: chatId,
-        text: message,
-        parse_mode: 'Markdown'
-      });
-    } catch (e) {
-      console.warn(`\x1b[33m~\x1b[0m Telegram alert failed: ${e.message}`);
-    }
   }
-}
 
 module.exports = { AccountRefreshScheduler };

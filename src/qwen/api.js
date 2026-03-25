@@ -8,6 +8,13 @@ const { promises: fs } = require('fs');
 const crypto = require('crypto');
 const { AccountHealthManager } = require('../utils/accountHealthManager.js');
 
+let telegramNotifier;
+try {
+  telegramNotifier = require('../utils/telegramNotifier.js');
+} catch (e) {
+  telegramNotifier = null;
+}
+
 // Create HTTP agents with connection pooling
 const httpAgent = new http.Agent({
   keepAlive: true,
@@ -729,7 +736,23 @@ class QwenAPI {
       throw lastError;
     }
 
-    throw new Error('No available accounts after exhausting all attempts');
+    const errorMsg = 'No available accounts after exhausting all attempts';
+    console.error(`\x1b[31m${errorMsg}\x1b[0m`);
+
+    if (telegramNotifier?.notifyAllAccountsUnavailable) {
+      const accountStatus = accountIds.map(id => {
+        const blocked = this.healthManager?.isBlocked(id);
+        const strikes = this.healthManager?.getStrikes(id) || 0;
+        return `${id} (blocked: ${blocked}, strikes: ${strikes})`;
+      }).join(', ');
+
+      await telegramNotifier.notifyAllAccountsUnavailable(
+        accountIds,
+        `All accounts failed. Status: ${accountStatus}. Last error: ${lastError?.message || 'unknown'}`
+      );
+    }
+
+    throw new Error(errorMsg);
   }
 
   async getApiEndpoint(credentials) {
